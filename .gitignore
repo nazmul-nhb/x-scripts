@@ -1,0 +1,9 @@
+node_modules
+.estimator
+dist
+.env
+__*.ts
+docs/.next
+docs/.source
+docs/.env.local
+ex.js

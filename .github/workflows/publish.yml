@@ -1,0 +1,193 @@
+name: Publish to NPM and Release with Tag
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout Repository
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # <- important to get full commit history
+          fetch-tags: true
+
+      # Get the current version from package.json
+      - name: Get version from package.json
+        id: get_version
+        run: |
+          VERSION=$(jq -r .version package.json)
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+      # Get the latest Git tag (fetch first to ensure remote tags are available)
+      - name: Get latest Git tag
+        id: get_latest_tag
+        run: |
+          git fetch --tags
+          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | head -n 1)
+          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+          echo "Latest tag found: $LATEST_TAG"
+
+      # Compare versions and skip if same
+      - name: Check if version changed
+        id: check_version
+        run: |
+          if [ "v${{ env.VERSION }}" = "${{ env.LATEST_TAG }}" ]; then
+              echo "VERSION_UNCHANGED=true" >> $GITHUB_ENV
+              echo "No new version to publish"
+              exit 0  # Exit early if version is unchanged
+          else
+              echo "VERSION_UNCHANGED=false" >> $GITHUB_ENV
+              echo "New version detected: v${{ env.VERSION }}"
+          fi
+
+      # Install PNPM, Setup Node.js, and Install Dependencies only if version changed
+      - name: Install PNPM
+        if: env.VERSION_UNCHANGED == 'false'
+        run: npm install -g pnpm
+
+      - name: Setup Node.js
+        if: env.VERSION_UNCHANGED == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          # registry-url: "https://registry.npmjs.org/"
+
+      # Install Dependencies (only root package, not docs)
+      - name: Install Dependencies
+        if: env.VERSION_UNCHANGED == 'false'
+        run: pnpm install --frozen-lockfile --filter x-scripts... --store-dir ~/.pnpm-store
+
+      # Generate release notes for the release
+      - name: Generate Release Notes
+        if: env.VERSION_UNCHANGED == 'false'
+        id: gen_notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          echo "LATEST_TAG: $LATEST_TAG"
+          git fetch --tags --prune
+
+          if [ -z "$LATEST_TAG" ]; then
+            TAG_SHA=""
+            echo "No previous tags found. Generating release notes for all commits."
+            pnpm dlx changelog-maker --all > release_notes.md
+          else
+            # tag commit SHA
+            TAG_SHA=$(git rev-parse "$LATEST_TAG")
+            echo "TAG_SHA: $TAG_SHA"
+
+            # show commits that are considered by the range (debug)
+            echo "Commits between $LATEST_TAG and HEAD:"
+            git --no-pager log --oneline "$LATEST_TAG..HEAD" || true
+
+            # first commit after the tag (earliest in range)
+            FIRST_AFTER=$(git rev-list --reverse "$LATEST_TAG..HEAD" | head -n 1 || true)
+
+            if [ -z "$FIRST_AFTER" ]; then
+              echo "No commits after $LATEST_TAG -> release_notes.md will be empty"
+              printf "" > release_notes.md
+            else
+              echo "First commit after last tag: $FIRST_AFTER"
+              git show -s --format="%h %s" "$FIRST_AFTER"
+
+              # generate release notes starting from the first commit AFTER last tag
+              pnpm dlx changelog-maker --start-ref "$FIRST_AFTER" > release_notes.md
+            fi
+
+            # sanity: ensure tag commit SHA is NOT included in generated notes
+            if [ -n "$TAG_SHA" ] && grep -q "$TAG_SHA" release_notes.md 2>/dev/null; then
+              echo "::warning::Tag commit SHA found inside release_notes.md — aborting to avoid including tagged commit"
+              echo "---- release_notes.md (top 60 lines) ----"
+              sed -n '1,60p' release_notes.md || true
+              echo "---- end ----"
+              exit 1
+            fi
+          fi
+
+          # export as multiline output
+          echo "body<<EOF" >> "$GITHUB_OUTPUT"
+          cat release_notes.md >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$LATEST_TAG" ]; then
+            echo "compare_section=" >> "$GITHUB_OUTPUT"
+          else
+            echo "compare_section=**Compare Changes:** [$LATEST_TAG vs v$VERSION](https://github.com/${{ github.repository }}/compare/$LATEST_TAG...v$VERSION)" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Create a local Git tag (not pushed yet — so changelog script sees it)
+      - name: Create Local Git Tag
+        if: env.VERSION_UNCHANGED == 'false'
+        run: git tag v${{ env.VERSION }}
+
+      # Generate CHANGELOG.md (sees the new tag → proper version header)
+      - name: Generate CHANGELOG.md
+        if: env.VERSION_UNCHANGED == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/generate-changelog.mjs
+
+      # Commit CHANGELOG.md before publish so npm package includes it
+      # GITHUB_TOKEN pushes do NOT trigger new workflow runs (no loop)
+      - name: Commit CHANGELOG.md
+        if: env.VERSION_UNCHANGED == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git diff --cached --quiet || git commit -m "📚 docs: updated CHANGELOG.md for v${{ env.VERSION }}"
+          git push origin main
+
+      # Publish to NPM Registry (CHANGELOG.md is now on disk and committed)
+      - name: Publish to NPM Registry
+        if: env.VERSION_UNCHANGED == 'false'
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          if [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
+            echo "Pre-release detected, tag 'next'"
+            pnpm publish --access public --tag next --no-git-checks --registry https://registry.npmjs.org
+          else
+            echo "Stable release, tag 'latest'"
+            pnpm publish --access public --no-git-checks --registry https://registry.npmjs.org
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Push the Git tag (after changelog commit)
+      - name: Push Git Tag
+        if: env.VERSION_UNCHANGED == 'false'
+        run: git push origin v${{ env.VERSION }}
+
+      # Create GitHub Release
+      - name: Create Release
+        if: env.VERSION_UNCHANGED == 'false'
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "v${{ env.VERSION }}"
+          name: "v${{ env.VERSION }}"
+          body: |
+            ## 📦 x-scripts v${{ env.VERSION }}
+              
+            ### 🆕 Release Notes
+            ${{ steps.gen_notes.outputs.body }}
+
+            ${{ steps.gen_notes.outputs.compare_section }}
+
+            ---
+            **[Docs](https://chronos.nazmul-nhb.dev) • [NPM](https://www.npmjs.com/package/x-scripts/v/${{ env.VERSION }})**

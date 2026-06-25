@@ -1,0 +1,98 @@
+{
+	"name": "x-scripts",
+	"version": "0.1.0-alpha.1",
+	"description": "A collection of custom Node.js scripts to use in TypeScript & JavaScript projects",
+	"main": "./dist/index.cjs",
+	"type": "module",
+	"keywords": [],
+	"devEngines": {
+		"packageManager": {
+			"name": "pnpm",
+			"version": "^11.9.0",
+			"onFail": "download"
+		}
+	},
+	"scripts": {
+		"build": "tsdown",
+		"watch": "tsdown --watch",
+		"typecheck": "tsc --noEmit",
+		"prepublishOnly": "pnpm run build",
+		"commit": "nhb-commit",
+		"count": "nhb-count",
+		"delete": "nhb-delete",
+		"lint": "biome lint --diagnostic-level=warn",
+		"fix": "biome check --write --diagnostic-level=warn",
+		"format": "biome format --write --diagnostic-level=warn",
+		"changelog": "node scripts/generate-changelog.mjs",
+		"prepare": "husky"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"files": [
+		"dist",
+		"LICENSE",
+		"README.md",
+		"package.json"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/nazmul-nhb/x-scripts.git"
+	},
+	"homepage": "https://github.com/nazmul-nhb/x-scripts#readme",
+	"author": {
+		"name": "Nazmul Hassan",
+		"email": "nazmulnhb@gmail.com",
+		"url": "https://nazmul-nhb.dev"
+	},
+	"contributors": [
+		{
+			"name": "Nazmul Hassan",
+			"email": "nazmulnhb007@yahoo.com",
+			"url": "https://github.com/nazmul-nhb"
+		},
+		{
+			"name": "Nazmul Hassan",
+			"email": "nazmulnhb@gmail.com",
+			"url": "https://github.com/nhb-nazmul"
+		}
+	],
+	"bugs": {
+		"url": "https://github.com/nazmul-nhb/x-scripts/issues",
+		"email": "nazmulnhb@gmail.com"
+	},
+	"license": "MIT",
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.1",
+		"@types/minimist": "^1.2.5",
+		"@types/node": "^26.0.1",
+		"husky": "^9.1.7",
+		"lint-staged": "^17.0.8",
+		"minimist": "^1.2.8",
+		"nhb-scripts": "^1.9.2",
+		"toolbox-x": "2.4.2",
+		"tsdown": "^0.22.3",
+		"typescript": "^6.0.3"
+	},
+	"lint-staged": {
+		"*.+((c|m)?js(x)?|(c|m)?ts(x)?)": [
+			"biome format --write --diagnostic-level=warn",
+			"biome lint --diagnostic-level=warn"
+		]
+	},
+	"module": "./dist/index.mjs",
+	"types": "./dist/index.d.cts",
+	"exports": {
+		".": {
+			"import": "./dist/index.mjs",
+			"require": "./dist/index.cjs"
+		},
+		"./package.json": "./package.json"
+	},
+	"inlinedDependencies": {
+		"minimist": "1.2.8"
+	},
+	"bin": {
+		"x-scripts": "./dist/index.mjs"
+	}
+}
