@@ -3,7 +3,7 @@
 		"target": "ES2023",
 		"lib": ["ESNext"],
 		"paths": {
-			"*": ["./*"],
+			"*": ["./*"]
 		},
 		"rootDir": "./",
 		"outDir": "./dist",

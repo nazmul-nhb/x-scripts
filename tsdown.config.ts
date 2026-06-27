@@ -9,14 +9,11 @@ export default defineConfig({
 	exports: true,
 	unbundle: false,
 	treeshake: true,
+	outDir: 'dist',
 	checks: {
 		pluginTimings: false,
 	},
 	deps: {
 		onlyBundle: ['toolbox-x', 'minimist'],
 	},
-	banner: `/**
- * Copyright 2026 - present Nazmul Hassan
- */
-`,
 });

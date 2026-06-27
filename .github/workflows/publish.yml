@@ -190,4 +190,4 @@ jobs:
             ${{ steps.gen_notes.outputs.compare_section }}
 
             ---
-            **[Docs](https://chronos.nazmul-nhb.dev) • [NPM](https://www.npmjs.com/package/x-scripts/v/${{ env.VERSION }})**
+            - [**NPM Registry**](https://www.npmjs.com/package/x-scripts/v/${{ env.VERSION }})

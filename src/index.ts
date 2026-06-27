@@ -31,7 +31,7 @@ const argv = minimist(process.argv.slice(2), {
 
 // console.info(process.argv.slice(2));
 // console.info(argv);
-// console.info(`Hello ${argv.name}`);
+console.info(`Hello ${argv.name}`);
 
 if (argv.copy) {
 	if (existsSync(argv.copy)) {
