@@ -1,6 +1,6 @@
 // @ts-check
 
-import { defineScriptConfig } from 'nhb-scripts';
+import { defineScriptConfig, runExeca } from 'nhb-scripts';
 import { convertStringCase, toCamelCase } from 'toolbox-x/change-case';
 import { isCamelCase } from 'toolbox-x/guards';
 
@@ -8,6 +8,9 @@ export default defineScriptConfig({
 	commit: {
 		runFormatter: false,
 		emojiBeforePrefix: true,
+		runBefore: async () => {
+			await runExeca('git', ['pull', '--ff-only']);
+		},
 		commitTypes: {
 			custom: [
 				{ emoji: '🚀', type: 'init' },
